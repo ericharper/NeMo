@@ -1,0 +1,3 @@
+[submodule "megatron"]
+	path = nemo/collections/nlp/model_parallel/megatron
+	url = https://github.com/ericharper/Megatron-LM
