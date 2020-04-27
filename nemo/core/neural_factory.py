@@ -291,9 +291,11 @@ class NeuralModuleFactory(object):
         create_tb_writer=False,
         files_to_copy=None,
         add_time_to_log_dir=False,
+        model_parallel_size=None,
     ):
         self._local_rank = local_rank
         self._global_rank = None
+        self._model_parallel_size = model_parallel_size
 
         if isinstance(optimization_level, str):
             optimization_level = _str_to_opt_level(optimization_level)
@@ -388,6 +390,12 @@ class NeuralModuleFactory(object):
                     return return_string
 
                 broadcast_func = torch_broadcast_wrapper
+                
+                if self._model_parallel_size is not None:
+                    # initialize model parallel and data parallel groups
+                    from nemo.collections.nlp.model_parallel.megatron.mpu.initialize import initialize_model_parallel
+                    inititialize_model_parallel(self._model_parallel_size)
+
         else:
             raise NotImplementedError("Only Pytorch backend is currently supported.")
 
