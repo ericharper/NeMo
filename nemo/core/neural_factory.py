@@ -86,9 +86,11 @@ class DeviceType(Enum):
 class Actions(ABC):
     """Basic actions allowed on graphs of Neural Modules"""
 
-    def __init__(self, local_rank, global_rank, optimization_level=Optimization.mxprO0):
+    def __init__(self, local_rank, global_rank, dp_rank, mp_rank, optimization_level=Optimization.mxprO0):
         self._local_rank = local_rank
         self._global_rank = global_rank
+        self._dp_rank = dp_rank
+        self._mp_rank = mp_rank
         self._optim_level = optimization_level
         self.step = None
         self.epoch_num = None
@@ -110,6 +112,24 @@ class Actions(ABC):
             (int) rank or worker or None if not in distributed model
         """
         return self._global_rank
+
+    @property
+    def mp_rank(self):
+        """Model parallel rank. None if not using model parallelism
+
+        Returns:
+            (int) model parallel rank or None if not using model parallelism
+        """
+        return self._mp_rank
+
+    @property
+    def dp_rank(self):
+        """Data parallel rank. None if not using data or model parallelism
+
+        Returns:
+            (int) data parallel rank or None if not using data or model parallelism
+        """
+        return self._dp_rank
 
     @abstractmethod
     def train(
@@ -292,9 +312,13 @@ class NeuralModuleFactory(object):
         create_tb_writer=False,
         files_to_copy=None,
         add_time_to_log_dir=False,
+        model_parallel_size=None,
     ):
         self._local_rank = local_rank
         self._global_rank = None
+        self._dp_rank = None
+        self._model_parallel_size = model_parallel_size
+        self._mp_rank = None
 
         if isinstance(optimization_level, str):
             optimization_level = _str_to_opt_level(optimization_level)
@@ -394,6 +418,14 @@ class NeuralModuleFactory(object):
                     return return_string
 
                 broadcast_func = torch_broadcast_wrapper
+                if self._model_parallel_size is not None:
+                    #from nemo.collections.nlp.nm.trainables.common.megatron_lm.megatron.mpu import initialize
+                    from megatron import mpu
+                    mpu.initialize.initialize_model_parallel(self._model_parallel_size)
+                    self._mp_rank = mpu.get_model_parallel_rank()
+                    self._dp_rank = mpu.get_data_parallel_rank()
+                else:
+                    self._dp_rank = self._global_rank
         else:
             raise NotImplementedError("Only Pytorch backend is currently supported.")
 
@@ -687,6 +719,8 @@ class NeuralModuleFactory(object):
             instance = constructor(
                 local_rank=self._local_rank,
                 global_rank=self._global_rank,
+                dp_rank=self._dp_rank,
+                mp_rank=self._mp_rank,
                 tb_writer=tb_writer,
                 optimization_level=self._optim_level,
             )
@@ -745,6 +779,10 @@ class NeuralModuleFactory(object):
         return self._world_size
 
     @property
+    def model_parallel_size(self):
+        return self._model_parallel_size
+
+    @property
     def tb_writer(self):
         return self._tb_writer
 
@@ -772,3 +810,15 @@ class NeuralModuleFactory(object):
     @property
     def global_rank(self):
         return self._global_rank
+    
+    @property
+    def local_rank(self):
+        return self._local_rank
+    
+    @property
+    def mp_rank(self):
+        return self._mp_rank
+
+    @property
+    def dp_rank(self):
+        return self._dp_rank

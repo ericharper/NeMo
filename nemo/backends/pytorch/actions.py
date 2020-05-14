@@ -50,7 +50,7 @@ _float_2_half_req = {
 
 class PtActions(Actions):
     def __init__(
-        self, local_rank=None, global_rank=None, tb_writer=None, optimization_level=Optimization.mxprO0,
+        self, local_rank=None, global_rank=None, dp_rank=None, mp_rank=None, tb_writer=None, optimization_level=Optimization.mxprO0,
     ):
         need_apex = local_rank is not None or optimization_level != Optimization.mxprO0
         if need_apex:
@@ -84,7 +84,7 @@ class PtActions(Actions):
                 )
 
         super(PtActions, self).__init__(
-            local_rank=local_rank, global_rank=global_rank, optimization_level=optimization_level,
+            local_rank=local_rank, global_rank=global_rank, dp_rank=dp_rank, mp_rank=mp_rank, optimization_level=optimization_level,
         )
 
         # will be [unique_instance_id -> (NMModule, PTModule)]

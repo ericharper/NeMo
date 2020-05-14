@@ -33,10 +33,14 @@ from nemo.collections.nlp.nm.data_layers import BertTokenClassificationDataLayer
 from nemo.collections.nlp.nm.trainables import TokenClassifier
 from nemo.utils.lr_policies import get_lr_policy
 
+from megatron.checkpointing import load_checkpoint
+
 # Parsing arguments
 """Provide extra arguments required for tasks."""
 parser = argparse.ArgumentParser(description="Token classification with pretrained BERT")
 parser.add_argument("--local_rank", default=None, type=int)
+#parser.add_argument("--model_parallel_size", default=None, type=int)
+parser.add_argument("--model-parallel-size", default=None, type=int)
 
 # training arguments
 parser.add_argument(
@@ -61,6 +65,12 @@ parser.add_argument(
     default=-1,
     type=int,
     help="Frequency of saving checkpoint '-1' - step checkpoint won't be saved",
+)
+parser.add_argument(
+    "--checkpoints_to_keep",
+    default=4,
+    type=int,
+    help="Number of checkpoints to keep",
 )
 parser.add_argument("--loss_step_freq", default=250, type=int, help="Frequency of printing loss")
 parser.add_argument("--use_weighted_loss", action='store_true', help="Flag to indicate whether to use weighted loss")
@@ -115,7 +125,12 @@ parser.add_argument(
     help="Name of the pre-trained model",
     choices=nemo_nlp.nm.trainables.get_bert_models_list(),
 )
-parser.add_argument("--bert_checkpoint", default=None, type=str)
+parser.add_argument(
+    "--bert_checkpoint",
+    default=None,
+    type=str,
+    help="Path to model file. (If using model parallel, path to checkpoint directory.)"
+)
 parser.add_argument("--bert_config", default=None, type=str, help="Path to bert config file in json format")
 
 args = parser.parse_args()
@@ -137,13 +152,16 @@ nf = nemo.core.NeuralModuleFactory(
     create_tb_writer=True,
     files_to_copy=[__file__],
     add_time_to_log_dir=not args.no_time_to_log_dir,
+    model_parallel_size=args.model_parallel_size,
 )
 
 output_file = f'{nf.work_dir}/output.txt'
 
 if 'megatron' in args.pretrained_model_name:
-    if not (args.bert_config and args.bert_checkpoint and args.vocab_file):
-        raise FileNotFoundError("Config file, checkpoint and vocabulary file should be provided for Megatron models.")
+    #if not (args.bert_config and args.bert_checkpoint and args.vocab_file): # checkpoints can be picked up automatically
+        #raise FileNotFoundError("Config file, checkpoint and vocabulary file should be provided for Megatron models.")
+    if not (args.bert_config and args.vocab_file):
+        raise FileNotFoundError("Config file and vocabulary file should be provided for Megatron models.")
     model = nemo_nlp.nm.trainables.MegatronBERT(
         model_name=args.pretrained_model_name, config_file=args.bert_config, vocab_file=args.vocab_file
     )
@@ -161,7 +179,10 @@ tokenizer = nemo.collections.nlp.data.tokenizers.get_tokenizer(
 )
 
 if args.bert_checkpoint is not None:
-    model.restore_from(args.bert_checkpoint)
+    if 'megatron' in args.pretrained_model_name:
+        model.megatron_restore_from(args.bert_checkpoint, nf.local_rank)
+    else:
+        model.restore_from(args.bert_checkpoint, nf.local_rank)
     logging.info(f"model restored from {args.bert_checkpoint}")
 
 hidden_size = model.hidden_size
@@ -269,7 +290,10 @@ eval_callback = nemo.core.EvaluatorCallback(
 )
 
 ckpt_callback = nemo.core.CheckpointCallback(
-    folder=nf.checkpoint_dir, epoch_freq=args.save_epoch_freq, step_freq=args.save_step_freq
+    folder=nf.checkpoint_dir,
+    epoch_freq=args.save_epoch_freq,
+    step_freq=args.save_step_freq,
+    checkpoints_to_keep=args.checkpoints_to_keep,
 )
 
 lr_policy_fn = get_lr_policy(

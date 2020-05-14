@@ -64,6 +64,14 @@ class ActionCallback(ABC):
     @property
     def global_rank(self):
         return self.action.global_rank
+    
+    @property
+    def mp_rank(self):
+        return self.action.mp_rank
+
+    @property
+    def dp_rank(self):
+        return self.action.dp_rank
 
     @property
     def action(self):
@@ -266,8 +274,14 @@ class CheckpointCallback(ActionCallback):
         self._force_load = force_load
 
     def __save_to(self, path):
-        if self.global_rank is not None and self.global_rank != 0:
+        #if self.global_rank is not None and self.global_rank != 0:
+        if self.dp_rank is not None and self.dp_rank != 0:
             return
+        if self.mp_rank is not None:
+            path = os.path.join(
+                path,
+                f'mp_rank_{self.mp_rank:02d}',
+                )
         if not os.path.isdir(path):
             logging.info(f"Creating {path} folder")
             os.makedirs(path, exist_ok=True)
@@ -303,6 +317,11 @@ class CheckpointCallback(ActionCallback):
         logging.info(f'Saved checkpoint: {path}/{filename}')
 
     def __restore_from(self, path):
+        if self.mp_rank is not None:
+            path = os.path.join(
+                path,
+                f'mp_rank_{self.mp_rank:02d}',
+                )
         if not os.path.isdir(path):
             if self._force_load:
                 raise ValueError("force_load was set to True for checkpoint callback but a checkpoint was not found.")
@@ -317,7 +336,7 @@ class CheckpointCallback(ActionCallback):
                     modules_to_restore_name.append(str(module))
             try:
                 module_checkpoints = get_checkpoint_from_dir(modules_to_restore_name, path)
-
+                print(f'module_checkpoints: {module_checkpoints}')
                 for mod, checkpoint in zip(modules_to_restore, module_checkpoints):
                     mod.restore_from(checkpoint, self.local_rank)
             except (BaseException, ValueError) as e:

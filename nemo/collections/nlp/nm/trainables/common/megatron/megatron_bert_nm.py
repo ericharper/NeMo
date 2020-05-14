@@ -21,13 +21,14 @@ import sys
 
 import torch
 
-sys.path.append('path_to/Megatron-LM')
+sys.path.append('/home/eharper/github/Megatron-LM')
 
 from megatron import get_args
 from megatron.initialize import initialize_megatron
 from megatron.model.bert_model import bert_attention_mask_func, bert_extended_attention_mask, bert_position_ids
 from megatron.model.language_model import get_language_model
 from megatron.model.utils import init_method_normal, scaled_init_method_normal
+from megatron.mpu import get_model_parallel_rank
 
 from nemo.backends.pytorch.nm import TrainableNM
 from nemo.core import DeviceType
@@ -102,6 +103,7 @@ class MegatronBERT(TrainableNM):
         }
 
         initialize_megatron(None, megatron_args, ignore_unknown_args=True)
+
         init_method = init_method_normal(init_method_std)
 
         self.language_model, self._language_model_key = get_language_model(
@@ -112,6 +114,7 @@ class MegatronBERT(TrainableNM):
             scaled_init_method=scaled_init_method_normal(init_method_std, config['num-layers']),
         )
 
+        print(f'self._device: {self._device}')
         self.language_model.to(self._device)
         self._hidden_size = self.language_model.hidden_size
 
@@ -136,8 +139,16 @@ class MegatronBERT(TrainableNM):
         )
         return sequence_output
 
-    def restore_from(self, path, local_rank=0):
-        if self.placement == DeviceType.AllGpu:
+    def megatron_restore_from(self, path, local_rank=None): # megatron mp checkpoints must be in the form "path/mp_rank_0X/model_optim_rng.pt"
+        # so we only need to pass in the base directory "path"
+        if self.factory.model_parallel_size is not None:
+            path = os.path.join(
+                path,
+                f'mp_rank_{self.factory.mp_rank:02d}',
+                'model_optim_rng.pt'
+                )
+        print(f'Loading model checkpoint: {path} on device {local_rank}')
+        if local_rank is not None:
             load_device = f"cuda:{local_rank}"
         else:
             load_device = self._device
@@ -149,3 +160,20 @@ class MegatronBERT(TrainableNM):
             self.language_model.load_state_dict(state_dict['model'][self._language_model_key])
         else:
             self.load_state_dict(state_dict)
+
+    def restore_from(self, path, local_rank=None):
+        if local_rank is not None:
+            load_device = f"cuda:{local_rank}"
+        else:
+            load_device = self._device
+
+        state_dict = torch.load(path, map_location=load_device)
+
+        # to load from Megatron pretrained checkpoint
+        if 'model' in state_dict:
+            self.language_model.load_state_dict(state_dict['model'][self._language_model_key])
+        else:
+            self.load_state_dict(state_dict)
+    
+    def save_to(self, path):
+        torch.save(self.state_dict(), path)
