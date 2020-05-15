@@ -320,6 +320,7 @@ class NeuralModuleFactory(object):
         self._dp_rank = None
         self._model_parallel_size = model_parallel_size
         self._mp_rank = None
+        self._random_seed = random_seed
 
         if isinstance(optimization_level, str):
             optimization_level = _str_to_opt_level(optimization_level)
@@ -420,7 +421,6 @@ class NeuralModuleFactory(object):
 
                 broadcast_func = torch_broadcast_wrapper
                 if self._model_parallel_size is not None:
-                    #from nemo.collections.nlp.nm.trainables.common.megatron_lm.megatron.mpu import initialize
                     from megatron import mpu
                     mpu.initialize.initialize_model_parallel(self._model_parallel_size)
                     self._mp_rank = mpu.get_model_parallel_rank()

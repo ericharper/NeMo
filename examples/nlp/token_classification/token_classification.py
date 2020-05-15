@@ -38,9 +38,8 @@ from megatron.checkpointing import load_checkpoint
 """Provide extra arguments required for tasks."""
 parser = argparse.ArgumentParser(description="Token classification with pretrained BERT")
 parser.add_argument("--local_rank", default=None, type=int)
-#parser.add_argument("--model_parallel_size", default=None, type=int)
 parser.add_argument("--model-parallel-size", default=None, type=int)
-
+parser.add_argument("--random_seed", default=None, type=int)
 # training arguments
 parser.add_argument(
     "--work_dir",
@@ -156,15 +155,14 @@ nf = nemo.core.NeuralModuleFactory(
     files_to_copy=[__file__],
     add_time_to_log_dir=not args.no_time_to_log_dir,
     model_parallel_size=args.model_parallel_size,
+    random_seed=args.random_seed,
 )
 
 output_file = f'{nf.work_dir}/output.txt'
 
 if 'megatron' in args.pretrained_model_name:
-    #if not (args.bert_config and args.bert_checkpoint and args.vocab_file): # checkpoints can be picked up automatically
-        #raise FileNotFoundError("Config file, checkpoint and vocabulary file should be provided for Megatron models.")
-    if not (args.bert_config and args.vocab_file):
-        raise FileNotFoundError("Config file and vocabulary file should be provided for Megatron models.")
+    if not (args.bert_config and args.bert_checkpoint and args.vocab_file and args.random_seed): 
+        raise FileNotFoundError("Config file, checkpoint and vocabulary file, and random seed should be provided for Megatron models.")
     model = nemo_nlp.nm.trainables.MegatronBERT(
         model_name=args.pretrained_model_name, config_file=args.bert_config, vocab_file=args.vocab_file
     )

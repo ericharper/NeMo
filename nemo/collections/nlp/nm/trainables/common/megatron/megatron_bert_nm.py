@@ -98,7 +98,9 @@ class MegatronBERT(TrainableNM):
         set_global_variables(extra_args_provider=None,
                         args_defaults=megatron_args,
                         ignore_unknown_args=True)
-        _set_random_seed(123)
+        if self.factory._random_seed is None:
+            raise ValueError("Megatron Neural Module requires Neural Factory to have random_seed is not None.")
+        _set_random_seed(self.factory._random_seed)
 
         init_method = init_method_normal(init_method_std)
 
