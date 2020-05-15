@@ -18,7 +18,7 @@ import json
 import os
 
 import torch
-from megatron.initialize import initialize_megatron
+from megatron.initialize import initialize_megatron, set_global_variables, _set_random_seed
 from megatron.model.bert_model import bert_attention_mask_func, bert_extended_attention_mask, bert_position_ids
 from megatron.model.language_model import get_language_model
 from megatron.model.utils import init_method_normal, scaled_init_method_normal
@@ -94,7 +94,11 @@ class MegatronBERT(TrainableNM):
             "vocab_file": vocab_file,
         }
 
-        initialize_megatron(None, megatron_args, ignore_unknown_args=True)
+        #initialize_megatron(None, megatron_args, ignore_unknown_args=True)
+        set_global_variables(extra_args_provider=None,
+                        args_defaults=megatron_args,
+                        ignore_unknown_args=True)
+        _set_random_seed(123)
 
         init_method = init_method_normal(init_method_std)
 
